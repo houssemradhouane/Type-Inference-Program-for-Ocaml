@@ -20,7 +20,7 @@ end
 
 
 (* implantation "lazy" des flux monadiques *)
-module Flux () : SPEC =
+module Flux : SPEC =
   struct
     type 'a t = Tick of ('a * 'a t) option Lazy.t
 

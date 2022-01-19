@@ -64,10 +64,10 @@ rule token =
 | "type"                   { TYPE }
 | '\''                     { QUOTE }
 | eof                      { EOF }
-| _                        { raise (ErreurLex "lexÃ¨me inconnu !") }
+| _                        { raise (ErreurLex "lexème inconnu !") }
 and comment =
  parse
-  eof                      { raise (ErreurLex "commentaire non fermÃ©, fin de fichier prÃ©maturÃ©e !") }
+  eof                      { raise (ErreurLex "commentaire non fermé, fin de fichier prématurée !") }
 | '\n'                     { incr line_g;
 			     comment lexbuf }
 | "*)"			   { token lexbuf }
