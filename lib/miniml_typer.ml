@@ -1,4 +1,6 @@
 open Miniml_types
+open Miniml_lexer
+open Miniml_parser
 
 (* signature minimale pour définir des variables *)
 module type VariableSpec =
@@ -90,6 +92,47 @@ let makeEquations exp e =
     | EApply(e1,e2) -> (getType e e1, TFun(getType e e2, getType e exp))::eq_liste
     | _ -> eq_liste
   in makeEquationsAcc exp [] e
+
+(* fonction qui remplace une variable fraîche *)
+(* par le type equivalent dans un système d'équations *)
+let rec replace alpha tau l =
+    match l with 
+    | [] -> []
+    | (t1,t2)::q -> let new_eq =
+                if t1 == alpha
+                then (tau,t2)
+                else (t1,t2)
+                in new_eq::(replace alpha tau q)
+
+(* Fonction qui résout un système d'équations de type *)
+let solveEquations l =
+  let rec solveEquationsAcc l res = 
+    match l with
+    | [] -> res
+    | (t1,t2)::q -> let add =
+                    match (t1,t2) with
+                    | TUnit, TUnit -> solveEquationsAcc q res
+                    | TInt, TInt -> solveEquationsAcc q res
+                    | TBool, TBool -> solveEquationsAcc q res
+                    | TList(typ1), TList(typ2) -> solveEquationsAcc q ((typ1,typ2)::res)
+                    | TFun(to1,to2),TFun(sig1,sig2) -> solveEquationsAcc q ((to1,sig1)::(to2,sig2)::res)
+                    | TProd(to1,to2),TProd(sig1,sig2) -> solveEquationsAcc q ((to1,sig1)::(to2,sig2)::res)
+                    | TVar(a), TVar(b) -> if TypeVariable.equal a b
+                                          then solveEquationsAcc q res
+                                          else failwith "failed to type"
+                    | ty, TVar(a) -> solveEquationsAcc q ((TVar(a),ty)::res)
+                    | TVar(a) ,ty -> solveEquationsAcc (replace (TVar(a)) ty q) (replace (TVar(a)) ty res)
+                    | _ -> failwith " failed to type"
+                    in add
+  in solveEquationsAcc l []
+
+let solve l =
+    let rec solverec l =
+        let l1 = solveEquations l in
+          if l=l1 then l
+          else solverec l1 
+    in solverec l
+
 
 
 
