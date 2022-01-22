@@ -2,8 +2,8 @@ open Miniml_types
 open Miniml_lexer
 open Lazyflux
 
-module Flux = Lazyflux.Flux ();;
-module Solution = Lazyflux.Flux ();;
+module Flux = Lazyflux.Flux;;
+module Solution = Lazyflux.Flux;;
 
 (* types des parsers généraux *)
 type ('a, 'b) result = ('b * 'a Flux.t) Solution.t;;

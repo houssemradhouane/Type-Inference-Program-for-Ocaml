@@ -40,10 +40,7 @@ module TypeVariable : VariableSpec =
 
 
 (* Définition du type environnement *)
-type env = (ident * 'a typ) list
-
-(* Définition du type equation : couple de deux types *)
-type equation = 'a typ * 'b typ
+type  'a env =  (ident * 'a typ) list
 
 (* Fonction qui à partir d'un identifiant de variable *)
 (* renvoie son type s'il existe dans l'environnement *)
@@ -51,40 +48,50 @@ let rec getTypeFromEnv env ident =
       match env with
       | [] -> None
       | (v,t)::q -> if v=ident then Some(t)
-                               else getType q ident
+                               else getTypeFromEnv q ident
 
 (* Fonction qui renvoie le type d'une expression *)
-let rec getType env exp =
+let rec getType e exp =
       match exp with
-      | EConstant(c) -> match c with
-                        | CBooleen(b) -> Tbool
-                        | CEntier(e) -> TInt
+      
+      | EProd(e1,e2) -> TProd(getType e e1, getType e e2)
+      | ECons (_,e2) -> getType e e2
+      | EFun(i,e1) -> let alpha = TVar(TypeVariable.fraiche ()) in
+                          TFun(alpha, getType ((i,alpha)::e) e1)
+      | EIf(e1,_,_) -> getType e e1
+      | EApply(_,_) ->TVar(TypeVariable.fraiche ())
+      | EBinop(_) -> TVar(TypeVariable.fraiche ())
+      | ELet(i,e1,e2) -> getType ((i,getType e e1)::e) e2
+      | ELetrec(i,_,e2) -> let alpha = TVar(TypeVariable.fraiche ()) in
+                         getType ((i,alpha)::e) e2
+      | EConstant(c) -> let cons = 
+                          match c with
+                        | CBooleen(_) -> TBool
+                        | CEntier(_) -> TInt
                         | CNil -> TList(TUnit)
                         | CUnit -> TUnit
-      | EIdent(i) -> match getTypeFromEnv env i with
+                        in cons
+      | EIdent(i) -> match getTypeFromEnv e i with
                     | Some(t) -> t
                     | None -> failwith "undefined variable"
-      | EProd(e1,e2) -> TProd(getType env e1, getType env e2)
-      | ECons (e1,e2) -> getType env e2
-      | EFun(i,e) -> let alpha = TVar(TypeVariable.fraiche ()) in
-                          Tfun(alpha, getType (i,alpha)::env e)
-      | EIf(e,e1,e2) -> getType e1
-      | EApply(e1,e2) ->TVar(TypeVariable.fraiche ())
-      | EBinop(t) -> TVar(TypeVariable.fraiche ())
-      | ELet(i,e1,e2) -> getType (i,getType env e1)::env e2
-      | ELetrec(i,e1,e2) -> let alpha = TVar(TypeVariable.fraiche ()) in
-                         getType (i,alpha)::env e2
 
 (* Fonction qui forme une liste d'équations de type *)
 (* à partir d'une expression *)
-let makeEquations exp env =
-  let makeEquationsAcc exp eq_liste env = 
+let makeEquations exp e =
+  let makeEquationsAcc exp eq_liste e = 
     match exp with
-    | ECons (e1,e2) -> (getType e2,TList(getType e1))::eq_liste
-    | EIf(e,e1,e2) ->  (getType e, TBool)::(getType e1, getType e2)::eq_liste
-    | ELetrec(i,e1,e2) -> (getType i, getType e1)::eq_liste 
-    | EApply(e1,e2) -> (getType e1, TFun(getType e2, getType exp))::eq_liste
+    | ECons (e1,e2) -> (getType e e2,TList(getType e e1))::eq_liste
+    | EIf(e1,e2,e3) ->  (getType e e1, TBool)::(getType e e2, getType e e3)::eq_liste
+    | ELetrec(i,e1,_) -> let t =
+                          match (getTypeFromEnv e i) with
+                          |Some(c) ->(c, getType e e1)::eq_liste 
+                          |None -> failwith "variable is not defined"
+                          in t
+    | EApply(e1,e2) -> (getType e e1, TFun(getType e e2, getType e exp))::eq_liste
     | _ -> eq_liste
-  in makeEquationsAcc exp []
+  in makeEquationsAcc exp [] e
+
+
+
 
 
