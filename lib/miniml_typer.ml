@@ -44,6 +44,9 @@ module TypeVariable : VariableSpec =
 (* Définition du type environnement *)
 type  'a env =  (ident * 'a typ) list
 
+(* fonction qui met à jour un environnement *)
+(* à partir d'une expression *)
+(* Sortie : environnement mis à jour*)
 let update_env exp e =
     match exp with
     | ELetrec(i,_,_) -> let alpha = TVar(TypeVariable.fraiche ()) in
@@ -60,6 +63,8 @@ let rec getTypeFromEnv env ident =
                                else getTypeFromEnv q ident
 
 (* Fonction qui renvoie le type d'une expression *)
+(* entrée : une expression *)
+(* sortie : son type avec les variables fraîches *)
 let rec getType e exp =
       let ne = (update_env exp e) in
       match exp with
@@ -87,8 +92,10 @@ let rec getType e exp =
                     | Some(t) -> t
                     | None -> failwith "undefined variable"
 
-(* Fonction qui forme une liste d'équations de type *)
+(* Fonction qui donne une équation de type *)
 (* à partir d'une expression *)
+(* entrée : expression, environnement *)
+(* sortie : liste d'equation de type (peut re vide)*)
 let makeEquation exp e = 
     match exp with
     | ECons (e1,e2) -> [((getType e e2),TList(getType e e1))]
@@ -102,6 +109,10 @@ let makeEquation exp e =
     | EApply(e1,e2) -> [(getType e e1, TFun(getType e e2, getType e exp))]
     | _ -> []
 
+(* Fonction qui donne un système d'équation de type *)
+(* à partir d'une expression. Elle parcourt l'expression récurissevement *)
+(* entrée : expression , environnement*)
+(* sortie : liste d'equation de type (peut être vide)*)
 let rec makeEquations exp e =
     match exp with
       | EProd(e1,e2) -> (makeEquation exp e)@(makeEquations e1 e)@(makeEquations e2 e)
@@ -117,6 +128,8 @@ let rec makeEquations exp e =
 
 (* fonction qui remplace une variable fraîche *)
 (* par le type equivalent dans un système d'équations *)
+(* entrée : variable de type, type equivalent, liste d'equations*)
+(* sortie : nouveau système d'equations*)
 let rec replace alpha tau l =
     match l with 
     | [] -> []
@@ -127,6 +140,8 @@ let rec replace alpha tau l =
                 in new_eq::(replace alpha tau q)
 
 (* Fonction qui résout un système d'équations de type *)
+(* entrée : liste d'equations*)
+(* sortie : liste normalisée des équations, doit re vide si bon typage*)
 let solveEquations l =
   let rec solveEquationsAcc l res = 
     match l with
@@ -148,6 +163,9 @@ let solveEquations l =
                     in add
   in solveEquationsAcc l []
 
+(* Fonction qui extrait une défintion de variable de type*)
+(* Entrée : Liste d'équations*)
+(* Sortie : (VariabledeType,TypeEquivalent*)
 let getDefinitions l =
     let rec getDefinitionsAcc l res = 
     match l with
@@ -160,6 +178,11 @@ let getDefinitions l =
                     in add
     in getDefinitionsAcc l []
 
+(*Fonction qui remplace une Variable de type *)
+(* par son type equivalent dans le type general *)
+(* d'une expression*)
+(* entrée : type de l'expression, type equivalent, environnement *)
+(* sortie : nouveau type mis à jour *)
 let rec injectDefinition exprty def e=
     let (alpha,ty) = def in
     match exprty with
@@ -169,14 +192,30 @@ let rec injectDefinition exprty def e=
     (* type int                    *)
     | TInt -> TInt
     (* variable de type            *)
-    | TVar(a) -> if TVar(a) = alpha then ty else TVar(a)
+    | TVar(a) -> if TVar(a) == alpha then ty else TVar(a)
     (* type produit: (t1 * t2)     *)
     | TProd(e1,e2) -> TProd(injectDefinition e1 def e,injectDefinition e2 def e)
     (* type fonction: (t1 -> t2)   *)
     | TFun(e1,e2) -> TFun(injectDefinition e1 def e,injectDefinition e2 def e)
     (* type liste: t1 list         *)
     | TList(t) -> TList(injectDefinition t def e)
-    
+
+(*Fonction qui remplace toutes les Variable de type *)
+(* par leurs type equivalent dans le type general *)
+(* d'une expression*)
+(* entrée : type de l'expression, types equivalents, environnement *)
+(* sortie : nouveau type mis à jour *)
+let rec finalizeType exprTy defs e =
+    match defs with
+    | [] -> exprTy
+    | def::q -> let nexprTy = injectDefinition exprTy def e in
+                    finalizeType nexprTy q e
+
+(* fonction qui résout un système d'équation en itérant *)
+(* sur le système jusqu'à ce qu'il n'y plus de travail à faire *)
+(* et renvoie les couples (variabledetype, typeEquivalent)*)
+(* entrée : liste d'equations *)
+(* sortie : (résultat d'application des règles, liste des couples)*)    
 let solve l =
     let rec solverec l def =
         let l2 = getDefinitions l in
@@ -190,7 +229,15 @@ let solve l =
   let  exp = match Flux.uncons (parseExpr f) with
            | Some((a,_),_) -> a
            | None -> failwith "parsing error" in 
-  makeEquations exp []
+  let l = makeEquations exp [] in
+  let (l1,l2) = solve l in
+  let ty = getType [] exp in
+  let def = match l2 with
+     | t::q -> t
+     | _ -> (TUnit,TUnit)
+  in injectDefinition ty def [] 
+  (* let fty = finalizeType ty l2 []
+  in fty *)
 
 
 
