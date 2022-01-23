@@ -1,3 +1,32 @@
+(*Le travail a été fait par:
+Houssem Radhouane
+Mohamed Hamza Kadri
+Mahmoud Laanaiya
+Pierre-Louis de Villers
+
+
+-----------------------------------
+Le script fonctionne correctement sur quelques exemples mais pas d'autres.
+On a essayé de corriger l'erreur dans notre code qui cause ceci, mais on a 
+une faute probablement dans notre fonction injectDefinition dans miniml_typer.
+
+1)Les parties qui donnent les résultats attendus :
+- Parser
+- Formation des équations de typage
+- Normalisation des équations de typage
+- Résolution du système d'équations
+- Levée d'erreur s'il y a un mauvais typage
+- affichage des résultats
+
+2)La partie qui ne donne pas le résultat attendu dans certain cas :
+- Injection du résultat final dans le type général pour l'affichage
+
+Les tests pour la formation du système d'équations et pour leur résolution passent
+(vous pouvez utiliser les fonctions de tests à la fin du fichier miniml_typer)
+Donc la seule partie qui semble poser problème est l'injection des résultats dans le
+type final.*)
+
+
 open Miniml_types
 open Miniml_lexer
 open Miniml_parser
@@ -63,6 +92,8 @@ let rec getTypeFromEnv env ident =
       | (v,t)::q -> if v=ident then Some(t)
                                else getTypeFromEnv q ident
 
+(*********************************************************************FORMATION DES EQUATIONS DE TYPE************************************************************************** *)
+
 (* Fonction qui renvoie le type d'une expression *)
 (* entrée : une expression *)
 (* sortie : son type avec les variables fraîches *)
@@ -127,7 +158,8 @@ let makeEquation exp e =
 (* à partir d'une expression. Elle parcourt l'expression récurissevement *)
 (* entrée : expression , environnement*)
 (* sortie : liste d'equation de type (peut être vide)*)
-let rec makeEquations exp e =
+let rec makeEquations exp en =
+    let e = update_env exp en in
     match exp with
       | EProd(e1,e2) -> (makeEquation exp e)@(makeEquations e1 e)@(makeEquations e2 e)
       | ECons (e1,e2) -> (makeEquation exp e)@(makeEquations e1 e)@(makeEquations e2 e)
@@ -135,10 +167,13 @@ let rec makeEquations exp e =
       | EIf(e1,e2,e3) -> (makeEquation exp e)@(makeEquations e1 e)@(makeEquations e2 e)@(makeEquations e3 e)
       | EApply(e1,e2) ->(makeEquation exp e)@(makeEquations e1 e)@(makeEquations e2 e)
       | EBinop(_) -> makeEquation exp e
-      | ELet(_,e1,e2) -> (makeEquation exp e)@(makeEquations e1 e)@(makeEquations e2 e)
+      | ELet(i,e1,e2) -> let (t,_) = getType e e1 in
+                          let en = (i,t)::e in
+                      (makeEquation exp en)@(makeEquations e1 en)@(makeEquations e2 en)
       | ELetrec(_,e1,e2) -> (makeEquation exp e)@(makeEquations e1 e)@(makeEquations e2 e)
       | EConstant(_) ->[]
       | EIdent(_) -> []
+(************************************************************NORMALISATION DES EQUATIONS DE TYPE*******************************************************************************)
 
 (* fonction qui remplace une variable fraîche *)
 (* par le type equivalent dans un système d'équations *)
@@ -155,7 +190,7 @@ let rec replace alpha tau l =
 
 (* Fonction qui résout un système d'équations de type *)
 (* entrée : liste d'equations*)
-(* sortie : liste normalisée des équations, doit re vide si bon typage*)
+(* sortie : liste normalisée des équations*)
 let solveEquations l =
   let rec solveEquationsAcc l res = 
     match l with
@@ -176,6 +211,8 @@ let solveEquations l =
                     | _ -> failwith " failed to type"
                     in add
   in solveEquationsAcc l []
+
+(*******************************************************************INJECTION DES RESULTATS DANS LE TYPE GENERAL*************************************************************** *)
 
 (* Fonction qui extrait une défintion de variable de type*)
 (* Entrée : Liste d'équations*)
@@ -218,7 +255,7 @@ let rec injectDefinition exprty def e=
 (* par leurs type equivalent dans le type general *)
 (* d'une expression*)
 (* entrée : type de l'expression, types equivalents, environnement *)
-(* sortie : nouveau type mis à jour *)
+(* sortie : type final de l'expression *)
 let rec finalizeType exprTy defs e =
     match defs with
     | [] -> exprTy
@@ -229,7 +266,7 @@ let rec finalizeType exprTy defs e =
 (* sur le système jusqu'à ce qu'il n'y plus de travail à faire *)
 (* et renvoie les couples (variabledetype, typeEquivalent)*)
 (* entrée : liste d'equations *)
-(* sortie : (résultat d'application des règles, liste des couples)*)    
+(* sortie : (résultat d'application des règles(doit être vide si bon typage), liste des couples (VariabledeType,TypeEquivalent))*)    
 let solve l =
     let rec solverec l def =
         let l2 = getDefinitions l in
@@ -238,15 +275,39 @@ let solve l =
           else solverec l1 (l2@def)
     in solverec l []
 
- let inferType chaine =
+(**************************************************************************FONCTIONS DE TESTS***********************************************************************************)
+
+(* fonction utile pour tester makeEquations*)
+let test_makeEquations chaine =
   let f =  read_miniml_tokens_from_string chaine  in 
   let  exp = match Flux.uncons (parseExpr f) with
            | Some((a,_),_) -> a
            | None -> failwith "parsing error" in 
-  let l = makeEquations exp []
-   in
-  let (l1,l2) = solve l in
-  let (ty,_) = getType [] exp in let fty =finalizeType ty l2 [] in print_typ TypeVariable.fprintf Format.std_formatter fty
+   makeEquations exp []
+
+(* fonction utile pour tester solve*)
+ let test_solve chaine =
+  let f =  read_miniml_tokens_from_string chaine  in 
+  let  exp = match Flux.uncons (parseExpr f) with
+           | Some((a,_),_) -> a
+           | None -> failwith "parsing error" in 
+  let l = makeEquations exp [] in solve l
+
+(* fonction utile pour tester injectDefinition*)
+ let test_injectDefinition chaine =
+  let f =  read_miniml_tokens_from_string chaine  in 
+  let  exp = match Flux.uncons (parseExpr f) with
+           | Some((a,_),_) -> a
+           | None -> failwith "parsing error" in 
+  let l = makeEquations exp [] in let (_,l2)=solve l in
+  let def = match l2 with
+      |t::_ ->t
+      |_ ->(TUnit,TUnit) in
+  let (t,_) = getType [] exp in
+  injectDefinition t def []
+   (* in
+  let (_,l2) = solve l in
+  let (ty,_) = getType [] exp in let fty =finalizeType ty l2 [] in print_typ TypeVariable.fprintf Format.std_formatter fty *)
 
 
 
