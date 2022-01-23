@@ -165,7 +165,7 @@ let rec parseExpr : (token, expr) parser = fun flux ->
   (
     (parseToken LET >>= fun () -> parseLiaison >>= fun (i, e) -> parseToken IN >>= fun () -> parseExpr >>= fun (e2) -> return (ELet (i, e, e2))) ++
     (parseToken LET >>= fun () -> parseToken REC >>= fun () -> parseLiaison >>= fun (i, e) ->
-       parseToken IN >>= fun () -> parseExpr >>= fun (e2) -> return (ELet (i, e, e2))) ++
+       parseToken IN >>= fun () -> parseExpr >>= fun (e2) -> return (ELetrec (i, e, e2))) ++
     (parseToken PARO >>= fun () -> parseExpr >>= fun (e1) -> parseBinop >>= fun (binop) ->
       parseExpr >>= fun (e2) -> parseToken PARF >>= fun () -> return (EApply (EApply (binop, e1), e2))) ++
     (parseToken PARO >>= fun () -> parseExpr >>= fun (e1) -> parseToken CONS >>= fun () ->
