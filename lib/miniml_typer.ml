@@ -1,6 +1,7 @@
 open Miniml_types
 open Miniml_lexer
 open Miniml_parser
+open Miniml_printer
 
 (* signature minimale pour définir des variables *)
 module type VariableSpec =
@@ -67,20 +68,23 @@ let rec getTypeFromEnv env ident =
 (* sortie : son type avec les variables fraîches *)
 let rec getType e exp =
       let ne = (update_env exp e) in
-      match exp with
-      | EProd(e1,e2) -> TProd(getType e e1, getType e e2)
-      | ECons (_,e2) -> getType e e2
-      | EFun(i,e1) -> 
-                        let alpha = match getTypeFromEnv ne i with
+      let typ =match exp with
+      | EProd(e1,e2) -> let (t1,_) = getType ne e1 in
+                        let (t2,_) = getType ne e2 in 
+                        TProd(t1,  t2)
+      | ECons (_,e2) -> let (t2,_) = getType ne e2 in t2
+      | EFun(i,e1) -> let alpha = match getTypeFromEnv ne i with
                            |Some(t) ->t
                            |None -> failwith "Non-existing-variable"
-                          in TFun(alpha, getType ne e1)
-      | EIf(_,e2,_) -> getType e e2
+                          in let (t1,_) = getType ne e1 in 
+                          TFun(alpha, t1)
+      | EIf(_,e2,_) -> let (t2,_) = getType ne e2 in t2
       | EApply(_,_) ->TVar(TypeVariable.fraiche ())
       | EBinop(_) -> TVar(TypeVariable.fraiche ())
-      | ELet(i,e1,e2) -> getType ((i,getType e e1)::e) e2
-      | ELetrec(_,_,e2) -> let ne = (update_env exp e) in 
-                                getType ne e2
+      | ELet(i,e1,e2) -> let (t1,_) = getType ne e1 in
+                         let (t2,_) = getType ((i,t1)::ne) e2 in 
+                            t2
+      | ELetrec(_,_,e2) -> let (t2,_) = getType ne e2 in t2
       | EConstant(c) -> let cons = 
                           match c with
                         | CBooleen(_) -> TBool
@@ -91,6 +95,7 @@ let rec getType e exp =
       | EIdent(i) -> match getTypeFromEnv e i with
                     | Some(t) -> t
                     | None -> failwith "undefined variable"
+      in (typ,ne)
 
 (* Fonction qui donne une équation de type *)
 (* à partir d'une expression *)
@@ -98,15 +103,24 @@ let rec getType e exp =
 (* sortie : liste d'equation de type (peut re vide)*)
 let makeEquation exp e = 
     match exp with
-    | ECons (e1,e2) -> [((getType e e2),TList(getType e e1))]
-    | EIf(e1,e2,e3) ->  [(getType e e1, TBool);(getType e e2, getType e e3)]
-    | ELetrec(i,e1,_) ->  let alpha = TVar(TypeVariable.fraiche ()) in 
+    | ECons (e1,e2) -> let (t1,_) = getType e e1 in
+                        let (t2,_) = getType e e2 in 
+                        [(t2,TList(t1))]
+    | EIf(e1,e2,e3) -> let (t1,_) = getType e e1 in
+                        let (t2,_) = getType e e2 in 
+                        let (t3,_) = getType e e3 in
+                         [(t1, TBool);(t2, t3)]
+    | ELetrec(i,e1,_) -> let (t1,_) = getType e e1 in
+                         let (_,ne) = getType e exp in
                             let t =
-                            match (getTypeFromEnv ((i,alpha)::e) i) with
-                            |Some(c) ->[(c, getType ((i,alpha)::e) e1)]
+                            match (getTypeFromEnv ne i) with
+                            |Some(c) ->[(c, t1)]
                             |None -> failwith "variable is not defined"
                           in t
-    | EApply(e1,e2) -> [(getType e e1, TFun(getType e e2, getType e exp))]
+    | EApply(e1,e2) -> let (t1,_) = getType e e1 in
+                       let (t2,_) = getType e e2 in 
+                       let (t,_) = getType e exp in
+                        [(t1, TFun(t2, t))]
     | _ -> []
 
 (* Fonction qui donne un système d'équation de type *)
@@ -229,15 +243,11 @@ let solve l =
   let  exp = match Flux.uncons (parseExpr f) with
            | Some((a,_),_) -> a
            | None -> failwith "parsing error" in 
-  let l = makeEquations exp [] in
+  let l = makeEquations exp []
+   in
   let (l1,l2) = solve l in
-  let ty = getType [] exp in
-  let def = match l2 with
-     | t::q -> t
-     | _ -> (TUnit,TUnit)
-  in injectDefinition ty def [] 
-  (* let fty = finalizeType ty l2 []
-  in fty *)
+  let (ty,_) = getType [] exp in let fty =finalizeType ty l2 [] in print_typ TypeVariable.fprintf Format.std_formatter fty
+
 
 
 

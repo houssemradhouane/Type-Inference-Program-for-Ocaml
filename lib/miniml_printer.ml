@@ -77,3 +77,4 @@ let rec print_typ print_var fmt typ =
   | TFun (t1, t2)  -> Format.fprintf fmt "(%a -> %a)" (print_typ print_var) t1 (print_typ print_var) t2
   | TList t1       -> Format.fprintf fmt "%a list" (print_typ print_var) t1
 
+
